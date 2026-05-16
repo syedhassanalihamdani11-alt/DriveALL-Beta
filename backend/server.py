@@ -287,6 +287,80 @@ async def get_locations():
     return LOCATIONS_DATA
 
 
+# ---------- Real geocoding (OSM Nominatim — no API key, worldwide accurate) ----------
+NOMINATIM_BASE = "https://nominatim.openstreetmap.org"
+_GEO_HEADERS = {"User-Agent": "DriveAll/1.5 (Azad Kashmir ride-hailing)", "Accept-Language": "en"}
+
+
+@api.get("/geocode/search")
+async def geocode_search(q: str, bias: Optional[str] = "ajk"):
+    """Autocomplete-style search. Returns exact lat/lng for each match.
+    bias=ajk biases results to Pakistan / Azad Kashmir; pass bias='' for worldwide."""
+    q = (q or "").strip()
+    if len(q) < 2:
+        return []
+    params = {"q": q, "format": "json", "limit": 8, "addressdetails": 1, "dedupe": 1}
+    if bias == "ajk":
+        params["countrycodes"] = "pk"
+    try:
+        async with httpx.AsyncClient(timeout=8) as hx:
+            r = await hx.get(f"{NOMINATIM_BASE}/search", params=params, headers=_GEO_HEADERS)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+    except Exception:
+        return []
+    out = []
+    for item in data:
+        addr = item.get("address", {}) or {}
+        # short readable label
+        short = (
+            addr.get("village")
+            or addr.get("town")
+            or addr.get("city")
+            or addr.get("hamlet")
+            or addr.get("suburb")
+            or addr.get("road")
+            or item.get("name")
+            or item.get("display_name", "").split(",")[0]
+        )
+        out.append({
+            "label": short,
+            "full_label": item.get("display_name"),
+            "lat": float(item["lat"]),
+            "lng": float(item["lon"]),
+            "type": item.get("type"),
+            "category": item.get("class"),
+            "importance": item.get("importance", 0),
+        })
+    out.sort(key=lambda x: -x.get("importance", 0))
+    return out
+
+
+@api.get("/geocode/reverse")
+async def reverse_geocode(lat: float, lng: float):
+    """Resolve lat/lng to a human-readable place label."""
+    try:
+        async with httpx.AsyncClient(timeout=8) as hx:
+            r = await hx.get(
+                f"{NOMINATIM_BASE}/reverse",
+                params={"lat": lat, "lon": lng, "format": "json", "addressdetails": 1, "zoom": 16},
+                headers=_GEO_HEADERS,
+            )
+        if r.status_code != 200:
+            return {"label": f"{lat:.4f}, {lng:.4f}", "lat": lat, "lng": lng}
+        d = r.json()
+    except Exception:
+        return {"label": f"{lat:.4f}, {lng:.4f}", "lat": lat, "lng": lng}
+    addr = d.get("address", {}) or {}
+    short = (
+        addr.get("village") or addr.get("town") or addr.get("city")
+        or addr.get("hamlet") or addr.get("suburb") or addr.get("road")
+        or d.get("display_name", "").split(",")[0]
+    )
+    return {"label": short, "full_label": d.get("display_name"), "lat": lat, "lng": lng}
+
+
 @api.post("/fare/estimate")
 async def fare_estimate(payload: dict):
     vt = payload.get("vehicle_type", "car")
