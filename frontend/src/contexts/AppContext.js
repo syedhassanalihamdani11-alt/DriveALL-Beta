@@ -3,9 +3,25 @@ import axios from 'axios';
 import { t as translate } from '../i18n';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-axios.defaults.withCredentials = true;
 
-export const api = axios.create({ baseURL: API, withCredentials: true });
+const TOKEN_KEY = 'da_token';
+export const getToken = () => localStorage.getItem(TOKEN_KEY);
+export const setToken = (t) => {
+  if (t) localStorage.setItem(TOKEN_KEY, t);
+  else localStorage.removeItem(TOKEN_KEY);
+};
+
+export const api = axios.create({ baseURL: API });
+
+// Attach Bearer token from localStorage on every request.
+api.interceptors.request.use((config) => {
+  const tok = getToken();
+  if (tok) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${tok}`;
+  }
+  return config;
+});
 
 const AppContext = createContext(null);
 
@@ -27,12 +43,18 @@ export function AppProvider({ children }) {
   }, [language]);
 
   const checkAuth = useCallback(async () => {
+    if (!getToken()) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
     try {
       const { data } = await api.get('/auth/me');
       setUser(data);
       if (data.language) setLanguageState(data.language);
       if (data.theme) setThemeState(data.theme);
     } catch (e) {
+      setToken(null);
       setUser(null);
     } finally {
       setLoading(false);
@@ -65,6 +87,7 @@ export function AppProvider({ children }) {
 
   const logout = async () => {
     try { await api.post('/auth/logout'); } catch (e) {}
+    setToken(null);
     setUser(null);
     window.location.href = '/';
   };

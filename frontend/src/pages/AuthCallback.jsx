@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, useApp } from '../contexts/AppContext';
+import { api, useApp, setToken } from '../contexts/AppContext';
 
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -23,6 +23,8 @@ export default function AuthCallback() {
     (async () => {
       try {
         const { data } = await api.post('/auth/session', { session_id: sessionId });
+        // Persist Bearer token in localStorage (works around ingress CORS limits on cookies)
+        if (data.session_token) setToken(data.session_token);
         setUser(data.user);
         window.history.replaceState({}, document.title, window.location.pathname);
         if (!data.user.role) {
@@ -31,6 +33,7 @@ export default function AuthCallback() {
           navigate('/home', { replace: true, state: { user: data.user } });
         }
       } catch (e) {
+        console.error('auth/session failed', e);
         setErr('Login failed. Please try again.');
       }
     })();
