@@ -37,6 +37,13 @@ api = APIRouter(prefix="/api")
 
 
 # ---------- Models ----------
+class SavedLocation(BaseModel):
+    label: str
+    lat: float
+    lng: float
+    address: str
+
+
 class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
@@ -45,10 +52,13 @@ class ProfileUpdate(BaseModel):
     theme: Optional[Literal["light", "dark"]] = None
     village: Optional[str] = None
     city: Optional[str] = None
+    picture: Optional[str] = None
     vehicle_model: Optional[str] = None
     vehicle_plate: Optional[str] = None
+    vehicle_type: Optional[Literal["bike", "car", "parcel", "transport"]] = None
     cnic: Optional[str] = None
     license_no: Optional[str] = None
+    saved_locations: Optional[list] = None  # list of SavedLocation dicts
 
 
 class DriverStatus(BaseModel):
@@ -65,6 +75,7 @@ class RideCreate(BaseModel):
     drop_lng: float
     drop_label: str
     offer_price: float
+    vehicle_type: Literal["bike", "car", "parcel", "transport"] = "car"
     notes: Optional[str] = None
 
 
@@ -74,6 +85,52 @@ class CounterOffer(BaseModel):
 
 class ChatMessage(BaseModel):
     text: str
+
+
+class DriverProgress(BaseModel):
+    stage: Literal["en_route", "arrived"]
+
+
+# ---------- Vehicle & Location config ----------
+VEHICLE_TYPES = {
+    "bike":      {"key": "bike",      "label": "Bike",     "label_ur": "Bike",     "base": 80,  "per_km": 25, "desc": "Sasta, gali ke liye"},
+    "car":       {"key": "car",       "label": "Car",      "label_ur": "Car",      "base": 150, "per_km": 50, "desc": "Family rides"},
+    "parcel":    {"key": "parcel",    "label": "Parcel",   "label_ur": "Saman",    "base": 100, "per_km": 35, "desc": "Small packages"},
+    "transport": {"key": "transport", "label": "Transport","label_ur": "Transport","base": 200, "per_km": 75, "desc": "Bulk / luggage"},
+}
+
+LOCATIONS_DATA = [
+    {"city": "Muzaffarabad",            "type": "city",    "lat": 34.3700, "lng": 73.4711,
+     "areas": ["Chattar Domel","Madina Market","Upper Adda","Cantt Bazaar","Plate","Lal Qila","Chehla Bandi","Domail","Neelum Road","Garhi Dupatta","CMH Road"]},
+    {"city": "Mirpur",                  "type": "city",    "lat": 33.1481, "lng": 73.7517,
+     "areas": ["Allama Iqbal Road","New City","Sector F","Sector D","Chowk Shaheedan","Bypass Chowk","Quaid-e-Azam Stadium Road","Mangla Road"]},
+    {"city": "Rawalakot",               "type": "city",    "lat": 33.8580, "lng": 73.7600,
+     "areas": ["Banjosa Lake","Tolipir","Hajira","Trar Khel","College Road","Bazaar Chowk","Poonch Road"]},
+    {"city": "Neelum Valley - Sharda",  "type": "village", "lat": 34.7866, "lng": 74.1857,
+     "areas": ["Sharda Fort","Sharda Bazaar","Surgan","Phulwai","Kel Road"]},
+    {"city": "Neelum Valley - Keran",   "type": "village", "lat": 34.6325, "lng": 73.9281,
+     "areas": ["Keran Bazaar","Upper Neelum","Dowarian","Pateeka"]},
+    {"city": "Neelum Valley - Athmuqam","type": "village", "lat": 34.5611, "lng": 73.8856,
+     "areas": ["Athmuqam Bazaar","Kel Road","Pateeka","Nausada"]},
+    {"city": "Hattian Bala",            "type": "village", "lat": 34.1647, "lng": 73.7522,
+     "areas": ["Chinari","Chikar","Reshian","Bagh Road","Hattian Bazaar","Leepa Road"]},
+    {"city": "Kotli",                   "type": "city",    "lat": 33.5187, "lng": 73.9023,
+     "areas": ["Sehnsa","Khuiratta","Chowki","Tatta Pani","Fatehpur Thakiala","Nakyal"]},
+    {"city": "Chakothi",                "type": "village", "lat": 34.0975, "lng": 73.8000,
+     "areas": ["LoC Road","Chakothi Bazaar","Garhi","Uri Road"]},
+]
+
+
+def estimate_fare(vehicle_type: str, distance_km: float):
+    cfg = VEHICLE_TYPES.get(vehicle_type) or VEHICLE_TYPES["car"]
+    base = cfg["base"] + cfg["per_km"] * distance_km
+    return {
+        "vehicle_type": vehicle_type,
+        "distance_km": round(distance_km, 2),
+        "low": int(round(base * 0.9)),
+        "suggested": int(round(base)),
+        "high": int(round(base * 1.2)),
+    }
 
 
 # ---------- Auth helpers ----------
@@ -104,6 +161,22 @@ async def get_current_user(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user
+
+
+# ---------- Config endpoints ----------
+@api.get("/config/vehicles")
+async def get_vehicles():
+    return list(VEHICLE_TYPES.values())
+
+
+@api.get("/config/locations")
+async def get_locations():
+    return LOCATIONS_DATA
+
+
+@api.post("/fare/estimate")
+async def fare_estimate(payload: dict):
+    return estimate_fare(payload.get("vehicle_type", "car"), float(payload.get("distance_km", 0)))
 
 
 # ---------- Auth routes ----------
@@ -243,9 +316,11 @@ async def create_ride(payload: RideCreate, request: Request, session_token: Opti
         "driver_id": None,
         "driver_name": None,
         "driver_phone": None,
+        "vehicle_type": payload.vehicle_type,
         "pickup": {"lat": payload.pickup_lat, "lng": payload.pickup_lng, "label": payload.pickup_label},
         "drop": {"lat": payload.drop_lat, "lng": payload.drop_lng, "label": payload.drop_label},
         "distance_km": distance_km,
+        "fare_estimate": estimate_fare(payload.vehicle_type, distance_km),
         "offer_price": payload.offer_price,
         "current_price": payload.offer_price,
         "final_price": None,
@@ -254,6 +329,8 @@ async def create_ride(payload: RideCreate, request: Request, session_token: Opti
         "driver_counters": 0,
         "offer_expires_at": now + timedelta(seconds=90),
         "status": "searching",
+        "driver_stage": None,  # en_route, arrived
+        "passenger_confirmed": False,
         "pin": pin,
         "pin_verified": False,
         "notes": payload.notes,
@@ -279,6 +356,9 @@ async def driver_requests(request: Request, session_token: Optional[str] = Cooki
     if user.get("role") != "driver":
         raise HTTPException(status_code=403, detail="Driver role required")
     q = {"status": {"$in": ["searching", "negotiating"]}, "driver_id": None}
+    # Filter by driver's vehicle type if set
+    if user.get("vehicle_type"):
+        q["vehicle_type"] = user["vehicle_type"]
     q2 = {"status": "negotiating", "driver_id": user["user_id"], "final_price": None}
     a = await db.rides.find(q, {"_id": 0}).sort("created_at", -1).to_list(50)
     b = await db.rides.find(q2, {"_id": 0}).to_list(50)
@@ -392,6 +472,21 @@ async def reject_offer(ride_id: str, request: Request, session_token: Optional[s
     return await db.rides.find_one({"ride_id": ride_id}, {"_id": 0})
 
 
+@api.post("/rides/{ride_id}/driver-stage")
+async def driver_stage(ride_id: str, payload: DriverProgress, request: Request, session_token: Optional[str] = Cookie(default=None), authorization: Optional[str] = Header(default=None)):
+    """Driver updates progress: en_route (heading to pickup) or arrived (at pickup)."""
+    user = await get_current_user(request, session_token, authorization)
+    ride = await db.rides.find_one({"ride_id": ride_id}, {"_id": 0})
+    if not ride:
+        raise HTTPException(status_code=404, detail="Ride not found")
+    if user["user_id"] != ride.get("driver_id"):
+        raise HTTPException(status_code=403, detail="Only assigned driver")
+    if ride["status"] != "accepted":
+        raise HTTPException(status_code=400, detail="Ride not in accepted state")
+    await db.rides.update_one({"ride_id": ride_id}, {"$set": {"driver_stage": payload.stage, "updated_at": datetime.now(timezone.utc)}})
+    return await db.rides.find_one({"ride_id": ride_id}, {"_id": 0})
+
+
 @api.post("/rides/{ride_id}/start")
 async def start_ride(ride_id: str, payload: dict, request: Request, session_token: Optional[str] = Cookie(default=None), authorization: Optional[str] = Header(default=None)):
     user = await get_current_user(request, session_token, authorization)
@@ -405,12 +500,13 @@ async def start_ride(ride_id: str, payload: dict, request: Request, session_toke
     pin = str(payload.get("pin", "")).strip()
     if pin != ride["pin"]:
         raise HTTPException(status_code=400, detail="Invalid PIN")
-    await db.rides.update_one({"ride_id": ride_id}, {"$set": {"status": "in_progress", "pin_verified": True, "started_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}})
+    await db.rides.update_one({"ride_id": ride_id}, {"$set": {"status": "in_progress", "pin_verified": True, "driver_stage": "in_progress", "started_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}})
     return await db.rides.find_one({"ride_id": ride_id}, {"_id": 0})
 
 
 @api.post("/rides/{ride_id}/complete")
 async def complete_ride(ride_id: str, request: Request, session_token: Optional[str] = Cookie(default=None), authorization: Optional[str] = Header(default=None)):
+    """Driver marks ride as completed → pending_confirm awaiting passenger confirmation."""
     user = await get_current_user(request, session_token, authorization)
     ride = await db.rides.find_one({"ride_id": ride_id}, {"_id": 0})
     if not ride:
@@ -419,7 +515,22 @@ async def complete_ride(ride_id: str, request: Request, session_token: Optional[
         raise HTTPException(status_code=403, detail="Only driver can complete")
     if ride["status"] != "in_progress":
         raise HTTPException(status_code=400, detail="Ride not in progress")
-    await db.rides.update_one({"ride_id": ride_id}, {"$set": {"status": "completed", "completed_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}})
+    await db.rides.update_one({"ride_id": ride_id}, {"$set": {"status": "pending_confirm", "completed_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}})
+    return await db.rides.find_one({"ride_id": ride_id}, {"_id": 0})
+
+
+@api.post("/rides/{ride_id}/confirm-complete")
+async def confirm_complete(ride_id: str, request: Request, session_token: Optional[str] = Cookie(default=None), authorization: Optional[str] = Header(default=None)):
+    """Passenger confirms cash exchange → ride closes & driver earnings credited."""
+    user = await get_current_user(request, session_token, authorization)
+    ride = await db.rides.find_one({"ride_id": ride_id}, {"_id": 0})
+    if not ride:
+        raise HTTPException(status_code=404, detail="Ride not found")
+    if user["user_id"] != ride.get("rider_id"):
+        raise HTTPException(status_code=403, detail="Only passenger can confirm")
+    if ride["status"] != "pending_confirm":
+        raise HTTPException(status_code=400, detail="Ride not awaiting confirmation")
+    await db.rides.update_one({"ride_id": ride_id}, {"$set": {"status": "completed", "passenger_confirmed": True, "updated_at": datetime.now(timezone.utc)}})
     await db.users.update_one({"user_id": ride["driver_id"]}, {"$inc": {"earnings": ride["final_price"] or 0}})
     return await db.rides.find_one({"ride_id": ride_id}, {"_id": 0})
 
@@ -432,13 +543,24 @@ async def trigger_sos(ride_id: str, request: Request, session_token: Optional[st
         raise HTTPException(status_code=404, detail="Ride not found")
     if user["user_id"] not in (ride["rider_id"], ride.get("driver_id")):
         raise HTTPException(status_code=403, detail="Forbidden")
-    await db.sos_alerts.insert_one({
+    alert = {
         "alert_id": f"sos_{uuid.uuid4().hex[:10]}",
         "ride_id": ride_id,
         "user_id": user["user_id"],
+        "rider": {"name": ride["rider_name"], "phone": ride.get("rider_phone")},
+        "driver": {"name": ride.get("driver_name"), "phone": ride.get("driver_phone")},
+        "pickup": ride["pickup"],
+        "drop": ride["drop"],
+        "driver_location": ride.get("driver_location"),
         "created_at": datetime.now(timezone.utc),
-    })
-    return {"ok": True, "message": "SOS alert recorded. Emergency contact notified."}
+    }
+    await db.sos_alerts.insert_one(alert)
+    return {
+        "ok": True,
+        "emergency_number": "1122",
+        "emergency_label": "Rescue Kashmir (1122)",
+        "message": "SOS alert recorded. Call 1122 immediately.",
+    }
 
 
 # ---------- Chat ----------
@@ -450,7 +572,7 @@ async def get_chat(ride_id: str, request: Request, session_token: Optional[str] 
         raise HTTPException(status_code=404, detail="Ride not found")
     if user["user_id"] not in (ride["rider_id"], ride.get("driver_id")):
         raise HTTPException(status_code=403, detail="Forbidden")
-    if ride["status"] not in ("accepted", "in_progress", "completed"):
+    if ride["status"] not in ("accepted", "in_progress", "pending_confirm", "completed"):
         raise HTTPException(status_code=400, detail="Chat unlocks after ride confirmation")
     msgs = await db.chats.find({"ride_id": ride_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
     return msgs
@@ -464,7 +586,7 @@ async def send_chat(ride_id: str, payload: ChatMessage, request: Request, sessio
         raise HTTPException(status_code=404, detail="Ride not found")
     if user["user_id"] not in (ride["rider_id"], ride.get("driver_id")):
         raise HTTPException(status_code=403, detail="Forbidden")
-    if ride["status"] not in ("accepted", "in_progress"):
+    if ride["status"] not in ("accepted", "in_progress", "pending_confirm"):
         raise HTTPException(status_code=400, detail="Chat is closed")
     doc = {
         "message_id": f"msg_{uuid.uuid4().hex[:10]}",

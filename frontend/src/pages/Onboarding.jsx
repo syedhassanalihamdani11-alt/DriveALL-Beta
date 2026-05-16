@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Car, User as UserIcon, ChevronRight } from 'lucide-react';
 import Logo from '../components/Logo';
+import VehicleSelector from '../components/VehicleSelector';
 import { api, useApp } from '../contexts/AppContext';
 
 export default function Onboarding() {
@@ -17,6 +18,7 @@ export default function Onboarding() {
     city: user?.city || '',
     vehicle_model: user?.vehicle_model || '',
     vehicle_plate: user?.vehicle_plate || '',
+    vehicle_type: user?.vehicle_type || 'car',
     cnic: user?.cnic || '',
     license_no: user?.license_no || '',
   });
@@ -97,6 +99,8 @@ export default function Onboarding() {
             {role === 'driver' && (
               <>
                 <div className="pt-3 text-xs font-semibold uppercase tracking-wider text-ink-500">{t('vehicle_info')}</div>
+                <div className="text-xs text-ink-500 mb-1">{t('your_vehicle')}</div>
+                <VehicleSelector value={form.vehicle_type} onChange={(v) => setForm({ ...form, vehicle_type: v })} testIdPrefix="onb-vtype" />
                 <Field label={t('vehicle_model')} value={form.vehicle_model} onChange={(v) => setForm({ ...form, vehicle_model: v })} testId="onb-vmodel" />
                 <Field label={t('vehicle_plate')} value={form.vehicle_plate} onChange={(v) => setForm({ ...form, vehicle_plate: v })} testId="onb-vplate" />
                 <Field label={t('cnic')} value={form.cnic} onChange={(v) => setForm({ ...form, cnic: v })} testId="onb-cnic" />

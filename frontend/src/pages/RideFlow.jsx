@@ -102,11 +102,29 @@ export default function RideFlow() {
       setRide(data);
     } finally { setBusy(false); }
   };
+  const doConfirmComplete = async () => {
+    setBusy(true);
+    try {
+      const { data } = await api.post(`/rides/${rideId}/confirm-complete`);
+      setRide(data);
+    } finally { setBusy(false); }
+  };
+  const doDriverStage = async (stage) => {
+    setBusy(true);
+    try {
+      const { data } = await api.post(`/rides/${rideId}/driver-stage`, { stage });
+      setRide(data);
+    } finally { setBusy(false); }
+  };
   const doSOS = async () => {
     if (!window.confirm(t('sos_confirm'))) return;
     try {
-      await api.post(`/rides/${rideId}/sos`);
-      alert('SOS sent');
+      const { data } = await api.post(`/rides/${rideId}/sos`);
+      // After alert is recorded, auto-dial emergency number
+      const num = data?.emergency_number || '1122';
+      if (window.confirm(t('sos_sent') + ' — Call ' + num + '?')) {
+        window.location.href = `tel:${num}`;
+      }
     } catch (e) {}
   };
   const shareTrip = async () => {
@@ -130,6 +148,7 @@ export default function RideFlow() {
   const status = ride.status;
   const isActiveNeg = status === 'searching' || status === 'negotiating';
   const isConfirmed = status === 'accepted' || status === 'in_progress';
+  const isPendingConfirm = status === 'pending_confirm';
 
   return (
     <div className="relative w-full h-[100dvh] overflow-hidden bg-ink-100 dark:bg-ink-950">
@@ -149,7 +168,7 @@ export default function RideFlow() {
         <div className="px-3 py-2 rounded-full bg-white dark:bg-ink-900 shadow-floating text-xs font-semibold capitalize text-ink-900 dark:text-white">
           {t(status) || status}
         </div>
-        {isConfirmed ? (
+        {(isConfirmed || isPendingConfirm) ? (
           <button data-testid="sos-button" onClick={doSOS} className="h-10 w-10 rounded-full bg-red-500 text-white shadow-floating flex items-center justify-center pulse-dot">
             <AlertTriangle size={18} />
           </button>
@@ -250,9 +269,36 @@ export default function RideFlow() {
             )}
 
             {isDriver && status === 'accepted' && (
-              <div className="mt-4">
+              <div className="mt-4 space-y-2">
+                {/* Driver stage buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    data-testid="stage-en-route-btn"
+                    onClick={() => doDriverStage('en_route')}
+                    disabled={busy || ride.driver_stage === 'en_route' || ride.driver_stage === 'arrived'}
+                    className={`h-10 rounded-xl text-xs font-semibold ${
+                      ride.driver_stage === 'en_route' || ride.driver_stage === 'arrived'
+                        ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-600 border border-brand-600/30'
+                        : 'bg-ink-100 dark:bg-ink-800 text-ink-700 dark:text-white'
+                    }`}
+                  >
+                    {ride.driver_stage === 'en_route' || ride.driver_stage === 'arrived' ? '✓ ' : ''}{t('mark_en_route')}
+                  </button>
+                  <button
+                    data-testid="stage-arrived-btn"
+                    onClick={() => doDriverStage('arrived')}
+                    disabled={busy || ride.driver_stage === 'arrived'}
+                    className={`h-10 rounded-xl text-xs font-semibold ${
+                      ride.driver_stage === 'arrived'
+                        ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-600 border border-brand-600/30'
+                        : 'bg-ink-100 dark:bg-ink-800 text-ink-700 dark:text-white'
+                    }`}
+                  >
+                    {ride.driver_stage === 'arrived' ? '✓ ' : ''}{t('mark_arrived')}
+                  </button>
+                </div>
                 <label className="text-xs text-ink-500">{t('enter_pin')}</label>
-                <div className="flex gap-2 mt-1">
+                <div className="flex gap-2">
                   <input
                     data-testid="pin-input"
                     inputMode="numeric"
@@ -265,7 +311,15 @@ export default function RideFlow() {
                     {t('start_ride')}
                   </button>
                 </div>
-                {error && <div className="mt-1 text-xs text-red-500">{error}</div>}
+                {error && <div className="text-xs text-red-500">{error}</div>}
+              </div>
+            )}
+
+            {/* Rider — driver stage indicator */}
+            {isRider && status === 'accepted' && ride.driver_stage && (
+              <div className="mt-3 text-xs px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 bg-blue-500 rounded-full pulse-dot" />
+                {ride.driver_stage === 'en_route' ? t('en_route') : t('arrived_at_pickup')}
               </div>
             )}
 
@@ -276,7 +330,7 @@ export default function RideFlow() {
                 disabled={busy}
                 className="mt-4 w-full h-12 rounded-xl bg-brand-600 text-white font-semibold flex items-center justify-center gap-2"
               >
-                <CheckCircle2 size={18} /> {t('complete_ride')}
+                <CheckCircle2 size={18} /> {t('driver_marks_complete')}
               </button>
             )}
 
@@ -295,6 +349,56 @@ export default function RideFlow() {
               >
                 <Share2 size={16} /> {t('share_trip')}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pending passenger confirmation */}
+      {isPendingConfirm && (
+        <div className="absolute left-0 right-0 bottom-0 z-30 p-4">
+          <div className="bg-white dark:bg-ink-900 rounded-3xl shadow-floating dark:shadow-floating-dark p-5">
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center h-14 w-14 rounded-full bg-orange-500/15 text-orange-500 mb-2">
+                <CheckCircle2 size={28} />
+              </div>
+              <div className="font-display text-xl font-semibold text-ink-900 dark:text-white">{t('pending_confirm')}</div>
+              <div className="text-sm text-ink-500 mt-1">{t('awaiting_passenger_confirm')}</div>
+              <div className="mt-3 inline-flex items-baseline gap-1">
+                <span className="font-display text-2xl font-bold text-brand-600">PKR {ride.final_price}</span>
+                <span className="text-xs text-ink-500">· {t('cash_only')}</span>
+              </div>
+            </div>
+            {isRider && (
+              <button
+                data-testid="confirm-complete-btn"
+                onClick={doConfirmComplete}
+                disabled={busy}
+                className="mt-4 w-full h-12 rounded-xl bg-brand-600 text-white font-semibold flex items-center justify-center gap-2"
+              >
+                <CheckCircle2 size={18} /> {t('confirm_complete')}
+              </button>
+            )}
+            {isDriver && (
+              <div className="mt-4 text-sm text-ink-500 text-center">
+                ⏳ {ride.rider_name}…
+              </div>
+            )}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                data-testid="open-chat-btn-pending"
+                onClick={() => setChatOpen(true)}
+                className="h-11 rounded-xl bg-ink-100 dark:bg-ink-800 text-ink-700 dark:text-white font-semibold flex items-center justify-center gap-2 text-sm"
+              >
+                <MessageCircle size={14} /> {t('chat')}
+              </button>
+              <a
+                data-testid="emergency-1122-btn"
+                href="tel:1122"
+                className="h-11 rounded-xl bg-red-500/10 text-red-500 font-semibold flex items-center justify-center gap-2 text-sm"
+              >
+                <Phone size={14} /> 1122
+              </a>
             </div>
           </div>
         </div>

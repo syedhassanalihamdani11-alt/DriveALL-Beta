@@ -43,10 +43,27 @@ export default function Profile() {
             </div>
             <div className="font-display text-3xl font-bold text-brand-600 mt-1" data-testid="profile-earnings">PKR {user.earnings?.toLocaleString() || 0}</div>
             <div className="mt-3 text-sm text-ink-700 dark:text-ink-200">
+              <Row k={t('your_vehicle')} v={user.vehicle_type} />
               <Row k={t('vehicle_model')} v={user.vehicle_model} />
               <Row k={t('vehicle_plate')} v={user.vehicle_plate} />
               <Row k={t('cnic')} v={user.cnic} />
               <Row k={t('license')} v={user.license_no} />
+            </div>
+          </div>
+        )}
+
+        {/* Saved locations preview */}
+        {(user.saved_locations || []).length > 0 && (
+          <div className="mt-6 rounded-2xl border border-ink-200 dark:border-ink-800 p-4">
+            <div className="text-xs uppercase tracking-wider text-ink-500 mb-2">{t('saved_locations')}</div>
+            <div className="space-y-2">
+              {(user.saved_locations || []).map((loc, i) => (
+                <div key={i} className="flex items-center gap-2 text-sm">
+                  <MapPin size={14} className="text-brand-600" />
+                  <span className="font-medium text-ink-900 dark:text-white">{loc.label}</span>
+                  <span className="text-ink-500 truncate">— {loc.address}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}
