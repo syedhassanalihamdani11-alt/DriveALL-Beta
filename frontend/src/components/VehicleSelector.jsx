@@ -2,7 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { Bike, Car, Package, Truck } from 'lucide-react';
 import { api } from '../contexts/AppContext';
 
-const ICON_MAP = { bike: Bike, car: Car, parcel: Package, transport: Truck };
+// Rickshaw custom icon (tuk-tuk silhouette)
+function RickshawIcon({ size = 22, strokeWidth = 2 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 17h2l1-7h11l1 4h3v3h-2" />
+      <circle cx="7" cy="18" r="2" />
+      <circle cx="17" cy="18" r="2" />
+      <path d="M6 10l1-3h6l2 3" />
+    </svg>
+  );
+}
+
+const ICON_MAP = { bike: Bike, car: Car, rickshaw: RickshawIcon, parcel: Package, transport: Truck };
 
 export function useVehicles() {
   const [vehicles, setVehicles] = useState([]);
@@ -14,8 +26,9 @@ export function useVehicles() {
 
 export default function VehicleSelector({ value, onChange, lang = 'en', testIdPrefix = 'vehicle' }) {
   const vehicles = useVehicles();
+  const cols = vehicles.length <= 4 ? 'grid-cols-4' : 'grid-cols-5';
   return (
-    <div className="grid grid-cols-4 gap-2" data-testid="vehicle-selector">
+    <div className={`grid ${cols} gap-2`} data-testid="vehicle-selector">
       {vehicles.map((v) => {
         const Icon = ICON_MAP[v.key] || Car;
         const active = value === v.key;

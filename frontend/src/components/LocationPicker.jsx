@@ -25,14 +25,23 @@ export default function LocationPicker({ title, onSelect, onUseGPS, onPinOnMap, 
     api.get('/config/locations').then(({ data }) => setData(data || [])).catch(() => {});
   }, []);
 
-  // Flat search index across all cities + areas
+  // Flat search index across all cities + areas (each area carries its OWN lat/lng)
   const flatIndex = useMemo(() => {
     const items = [];
     data.forEach((c) => {
       items.push({ type: 'city', label: c.city, city: c.city, area: null, lat: c.lat, lng: c.lng });
-      (c.areas || []).forEach((a) =>
-        items.push({ type: 'area', label: `${a}, ${c.city}`, city: c.city, area: a, lat: c.lat, lng: c.lng })
-      );
+      (c.areas || []).forEach((a) => {
+        // Backward compat: area may be a string (legacy) or {name, lat, lng}
+        const isObj = typeof a === 'object' && a !== null;
+        items.push({
+          type: 'area',
+          label: `${isObj ? a.name : a}, ${c.city}`,
+          city: c.city,
+          area: isObj ? a.name : a,
+          lat: isObj ? a.lat : c.lat,
+          lng: isObj ? a.lng : c.lng,
+        });
+      });
     });
     return items;
   }, [data]);
@@ -44,9 +53,8 @@ export default function LocationPicker({ title, onSelect, onUseGPS, onPinOnMap, 
   }, [flatIndex, search]);
 
   const pickItem = (item) => {
-    // tiny jitter so area markers don't all collide on the city center
-    const jitter = (n) => n + (Math.random() - 0.5) * 0.01;
-    onSelect({ lat: jitter(item.lat), lng: jitter(item.lng), label: item.label });
+    // Each POI has its own real lat/lng — no jitter
+    onSelect({ lat: item.lat, lng: item.lng, label: item.label });
   };
 
   return (
@@ -163,17 +171,23 @@ export default function LocationPicker({ title, onSelect, onUseGPS, onPinOnMap, 
                 <MapPin size={14} className="text-brand-600" />
                 <span className="text-sm font-medium text-brand-700 dark:text-brand-300">{city.city} (city center)</span>
               </button>
-              {city.areas.map((a) => (
-                <button
-                  key={a}
-                  data-testid={`loc-area-${a.replace(/\s+/g,'-').toLowerCase()}`}
-                  onClick={() => pickItem({ city: city.city, area: a, label: `${a}, ${city.city}`, lat: city.lat, lng: city.lng })}
-                  className="w-full text-left px-4 py-2.5 rounded-xl bg-white dark:bg-ink-800/60 border border-ink-200 dark:border-ink-800 hover:border-brand-600 flex items-center gap-2"
-                >
-                  <MapPin size={14} className="text-ink-500" />
-                  <span className="text-sm text-ink-900 dark:text-white">{a}</span>
-                </button>
-              ))}
+              {city.areas.map((a) => {
+                const isObj = typeof a === 'object' && a !== null;
+                const name = isObj ? a.name : a;
+                const lat = isObj ? a.lat : city.lat;
+                const lng = isObj ? a.lng : city.lng;
+                return (
+                  <button
+                    key={name}
+                    data-testid={`loc-area-${name.replace(/\s+/g,'-').toLowerCase()}`}
+                    onClick={() => pickItem({ city: city.city, area: name, label: `${name}, ${city.city}`, lat, lng })}
+                    className="w-full text-left px-4 py-2.5 rounded-xl bg-white dark:bg-ink-800/60 border border-ink-200 dark:border-ink-800 hover:border-brand-600 flex items-center gap-2"
+                  >
+                    <MapPin size={14} className="text-ink-500" />
+                    <span className="text-sm text-ink-900 dark:text-white">{name}</span>
+                  </button>
+                );
+              })}
             </div>
           </>
         )}

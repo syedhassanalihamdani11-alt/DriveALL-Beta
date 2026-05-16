@@ -5,9 +5,11 @@ import os
 import uuid
 import random
 import asyncio
+import secrets
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Literal
 
+import bcrypt
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Cookie, Header
@@ -55,7 +57,7 @@ class ProfileUpdate(BaseModel):
     picture: Optional[str] = None
     vehicle_model: Optional[str] = None
     vehicle_plate: Optional[str] = None
-    vehicle_type: Optional[Literal["bike", "car", "parcel", "transport"]] = None
+    vehicle_type: Optional[Literal["bike", "car", "rickshaw", "parcel", "transport"]] = None
     cnic: Optional[str] = None
     license_no: Optional[str] = None
     saved_locations: Optional[list] = None  # list of SavedLocation dicts
@@ -75,7 +77,7 @@ class RideCreate(BaseModel):
     drop_lng: float
     drop_label: str
     offer_price: float
-    vehicle_type: Literal["bike", "car", "parcel", "transport"] = "car"
+    vehicle_type: Literal["bike", "car", "rickshaw", "parcel", "transport"] = "car"
     notes: Optional[str] = None
 
 
@@ -95,30 +97,141 @@ class DriverProgress(BaseModel):
 VEHICLE_TYPES = {
     "bike":      {"key": "bike",      "label": "Bike",     "label_ur": "Bike",     "base": 80,  "per_km": 25, "desc": "Sasta, gali ke liye"},
     "car":       {"key": "car",       "label": "Car",      "label_ur": "Car",      "base": 150, "per_km": 50, "desc": "Family rides"},
-    "parcel":    {"key": "parcel",    "label": "Parcel",   "label_ur": "Saman",    "base": 100, "per_km": 35, "desc": "Small packages"},
+    "rickshaw":  {"key": "rickshaw",  "label": "Rickshaw", "label_ur": "Rickshaw", "base": 100, "per_km": 30, "desc": "Local short rides"},
     "transport": {"key": "transport", "label": "Transport","label_ur": "Transport","base": 200, "per_km": 75, "desc": "Bulk / luggage"},
 }
 
+# Each POI is an INDEPENDENT geo point with its own lat/lng.
+# Cities act as parent buckets only — picking an area pins exactly that area's coords.
 LOCATIONS_DATA = [
-    {"city": "Muzaffarabad",            "type": "city",    "lat": 34.3700, "lng": 73.4711,
-     "areas": ["Chattar Domel","Madina Market","Upper Adda","Cantt Bazaar","Plate","Lal Qila","Chehla Bandi","Domail","Neelum Road","Garhi Dupatta","CMH Road"]},
-    {"city": "Mirpur",                  "type": "city",    "lat": 33.1481, "lng": 73.7517,
-     "areas": ["Allama Iqbal Road","New City","Sector F","Sector D","Chowk Shaheedan","Bypass Chowk","Quaid-e-Azam Stadium Road","Mangla Road"]},
-    {"city": "Rawalakot",               "type": "city",    "lat": 33.8580, "lng": 73.7600,
-     "areas": ["Banjosa Lake","Tolipir","Hajira","Trar Khel","College Road","Bazaar Chowk","Poonch Road"]},
-    {"city": "Neelum Valley - Sharda",  "type": "village", "lat": 34.7866, "lng": 74.1857,
-     "areas": ["Sharda Fort","Sharda Bazaar","Surgan","Phulwai","Kel Road"]},
-    {"city": "Neelum Valley - Keran",   "type": "village", "lat": 34.6325, "lng": 73.9281,
-     "areas": ["Keran Bazaar","Upper Neelum","Dowarian","Pateeka"]},
-    {"city": "Neelum Valley - Athmuqam","type": "village", "lat": 34.5611, "lng": 73.8856,
-     "areas": ["Athmuqam Bazaar","Kel Road","Pateeka","Nausada"]},
-    {"city": "Hattian Bala",            "type": "village", "lat": 34.1647, "lng": 73.7522,
-     "areas": ["Chinari","Chikar","Reshian","Bagh Road","Hattian Bazaar","Leepa Road"]},
-    {"city": "Kotli",                   "type": "city",    "lat": 33.5187, "lng": 73.9023,
-     "areas": ["Sehnsa","Khuiratta","Chowki","Tatta Pani","Fatehpur Thakiala","Nakyal"]},
-    {"city": "Chakothi",                "type": "village", "lat": 34.0975, "lng": 73.8000,
-     "areas": ["LoC Road","Chakothi Bazaar","Garhi","Uri Road"]},
+    {
+        "city": "Muzaffarabad", "type": "city", "lat": 34.3700, "lng": 73.4711,
+        "areas": [
+            {"name": "City Center / Madina Market", "lat": 34.3702, "lng": 73.4712},
+            {"name": "PC Hotel Muzaffarabad",       "lat": 34.3681, "lng": 73.4677},
+            {"name": "Chattar Domel",               "lat": 34.3503, "lng": 73.4517},
+            {"name": "Neelum Bridge",               "lat": 34.3815, "lng": 73.4810},
+            {"name": "Upper Adda",                  "lat": 34.3675, "lng": 73.4690},
+            {"name": "Cantt Bazaar",                "lat": 34.3625, "lng": 73.4641},
+            {"name": "Chehla Bandi",                "lat": 34.3733, "lng": 73.4810},
+            {"name": "Plate",                       "lat": 34.3850, "lng": 73.4750},
+            {"name": "Domail",                      "lat": 34.3580, "lng": 73.4700},
+            {"name": "Lal Qila",                    "lat": 34.3789, "lng": 73.4733},
+            {"name": "Neelum Road",                 "lat": 34.3830, "lng": 73.4920},
+            {"name": "CMH Road",                    "lat": 34.3633, "lng": 73.4570},
+        ],
+    },
+    {
+        "city": "Garhi Dupatta", "type": "village", "lat": 34.2336, "lng": 73.6253,
+        "areas": [
+            {"name": "Garhi Dupatta Bazaar",        "lat": 34.2336, "lng": 73.6253},
+            {"name": "Naliyan / Naliya",            "lat": 34.2890, "lng": 73.5430},
+            {"name": "Langla",                      "lat": 34.2050, "lng": 73.6580},
+            {"name": "Bela",                        "lat": 34.0710, "lng": 73.7560},
+        ],
+    },
+    {
+        "city": "Hattian Bala", "type": "village", "lat": 34.1647, "lng": 73.7522,
+        "areas": [
+            {"name": "Hattian Bala Bazaar",         "lat": 34.1647, "lng": 73.7522},
+            {"name": "Channari (Chinari)",          "lat": 34.1503, "lng": 73.6989},
+            {"name": "Chakothi Border Area",        "lat": 34.0975, "lng": 73.8000},
+            {"name": "Ghora Abad",                  "lat": 34.1380, "lng": 73.7160},
+            {"name": "Chikar",                      "lat": 34.2150, "lng": 73.6750},
+            {"name": "Reshian",                     "lat": 34.2700, "lng": 73.6300},
+            {"name": "Leepa Road",                  "lat": 34.2333, "lng": 73.9333},
+            {"name": "Nadool Ground",               "lat": 34.1730, "lng": 73.7610},
+            {"name": "Nadool Adalat Bazaar",        "lat": 34.1758, "lng": 73.7595},
+        ],
+    },
+    {
+        "city": "Chakothi", "type": "village", "lat": 34.0975, "lng": 73.8000,
+        "areas": [
+            {"name": "Chakothi Bazaar",             "lat": 34.0975, "lng": 73.8000},
+            {"name": "LoC Road",                    "lat": 34.0890, "lng": 73.8120},
+            {"name": "Uri Road",                    "lat": 34.1100, "lng": 73.7900},
+        ],
+    },
+    {
+        "city": "Mirpur", "type": "city", "lat": 33.1481, "lng": 73.7517,
+        "areas": [
+            {"name": "Allama Iqbal Road",           "lat": 33.1483, "lng": 73.7521},
+            {"name": "New City",                    "lat": 33.1610, "lng": 73.7530},
+            {"name": "Sector F",                    "lat": 33.1450, "lng": 73.7560},
+            {"name": "Sector D",                    "lat": 33.1530, "lng": 73.7470},
+            {"name": "Chowk Shaheedan",             "lat": 33.1495, "lng": 73.7505},
+            {"name": "Bypass Chowk",                "lat": 33.1382, "lng": 73.7480},
+            {"name": "Quaid-e-Azam Stadium Road",   "lat": 33.1565, "lng": 73.7501},
+            {"name": "Mangla Road",                 "lat": 33.1310, "lng": 73.6810},
+        ],
+    },
+    {
+        "city": "Rawalakot", "type": "city", "lat": 33.8580, "lng": 73.7600,
+        "areas": [
+            {"name": "Bazaar Chowk",                "lat": 33.8581, "lng": 73.7601},
+            {"name": "Banjosa Lake",                "lat": 33.7956, "lng": 73.8175},
+            {"name": "Tolipir",                     "lat": 33.8853, "lng": 73.8689},
+            {"name": "Hajira",                      "lat": 33.7720, "lng": 73.9220},
+            {"name": "Trar Khel",                   "lat": 33.6450, "lng": 73.8970},
+            {"name": "College Road",                "lat": 33.8610, "lng": 73.7615},
+            {"name": "Poonch Road",                 "lat": 33.8550, "lng": 73.7560},
+        ],
+    },
+    {
+        "city": "Neelum Valley - Athmuqam", "type": "village", "lat": 34.5611, "lng": 73.8856,
+        "areas": [
+            {"name": "Athmuqam Bazaar",             "lat": 34.5611, "lng": 73.8856},
+            {"name": "Pateeka",                     "lat": 34.4380, "lng": 73.6740},
+            {"name": "Nausada",                     "lat": 34.5180, "lng": 73.8050},
+            {"name": "Kel Road (south)",            "lat": 34.5800, "lng": 73.9200},
+        ],
+    },
+    {
+        "city": "Neelum Valley - Keran", "type": "village", "lat": 34.6325, "lng": 73.9281,
+        "areas": [
+            {"name": "Keran Bazaar",                "lat": 34.6325, "lng": 73.9281},
+            {"name": "Upper Neelum",                "lat": 34.6750, "lng": 73.9580},
+            {"name": "Dowarian",                    "lat": 34.6680, "lng": 73.9420},
+        ],
+    },
+    {
+        "city": "Neelum Valley - Sharda", "type": "village", "lat": 34.7866, "lng": 74.1857,
+        "areas": [
+            {"name": "Sharda Bazaar",               "lat": 34.7866, "lng": 74.1857},
+            {"name": "Sharda Fort",                 "lat": 34.7900, "lng": 74.1900},
+            {"name": "Surgan",                      "lat": 34.7510, "lng": 74.1430},
+            {"name": "Phulwai",                     "lat": 34.7980, "lng": 74.2200},
+        ],
+    },
+    {
+        "city": "Kotli", "type": "city", "lat": 33.5187, "lng": 73.9023,
+        "areas": [
+            {"name": "Kotli City",                  "lat": 33.5187, "lng": 73.9023},
+            {"name": "Sehnsa",                      "lat": 33.5630, "lng": 73.9520},
+            {"name": "Khuiratta",                   "lat": 33.3220, "lng": 73.9810},
+            {"name": "Chowki",                      "lat": 33.5710, "lng": 73.8920},
+            {"name": "Tatta Pani",                  "lat": 33.5070, "lng": 73.9550},
+            {"name": "Fatehpur Thakiala",           "lat": 33.6200, "lng": 73.8500},
+            {"name": "Nakyal",                      "lat": 33.6480, "lng": 74.0820},
+        ],
+    },
 ]
+
+
+async def _osrm_distance_km(lat1, lng1, lat2, lng2):
+    """Use OSRM public router for real road distance. Falls back to haversine on failure."""
+    try:
+        url = f"https://router.project-osrm.org/route/v1/driving/{lng1},{lat1};{lng2},{lat2}?overview=false"
+        async with httpx.AsyncClient(timeout=6) as hx:
+            r = await hx.get(url)
+        if r.status_code == 200:
+            d = r.json()
+            if d.get("code") == "Ok" and d.get("routes"):
+                meters = d["routes"][0]["distance"]
+                return round(meters / 1000.0, 2)
+    except Exception:
+        pass
+    return None
 
 
 def estimate_fare(vehicle_type: str, distance_km: float):
@@ -176,7 +289,18 @@ async def get_locations():
 
 @api.post("/fare/estimate")
 async def fare_estimate(payload: dict):
-    return estimate_fare(payload.get("vehicle_type", "car"), float(payload.get("distance_km", 0)))
+    vt = payload.get("vehicle_type", "car")
+    # If lat/lng supplied, use real road distance via OSRM; else fall back to provided distance.
+    p_lat, p_lng = payload.get("pickup_lat"), payload.get("pickup_lng")
+    d_lat, d_lng = payload.get("drop_lat"), payload.get("drop_lng")
+    dist = None
+    if all(v is not None for v in (p_lat, p_lng, d_lat, d_lng)):
+        dist = await _osrm_distance_km(p_lat, p_lng, d_lat, d_lng)
+    if dist is None:
+        dist = float(payload.get("distance_km", 0))
+    out = estimate_fare(vt, dist)
+    out["source"] = "osrm" if "pickup_lat" in payload and dist == out["distance_km"] else "fallback"
+    return out
 
 
 # ---------- Auth routes ----------
@@ -306,7 +430,9 @@ async def create_ride(payload: RideCreate, request: Request, session_token: Opti
         raise HTTPException(status_code=403, detail="Rider role required")
     ride_id = f"ride_{uuid.uuid4().hex[:12]}"
     pin = str(random.randint(1000, 9999))
-    distance_km = round(_haversine(payload.pickup_lat, payload.pickup_lng, payload.drop_lat, payload.drop_lng), 2)
+    # Use real road distance from OSRM; haversine fallback only if routing fails
+    road_dist = await _osrm_distance_km(payload.pickup_lat, payload.pickup_lng, payload.drop_lat, payload.drop_lng)
+    distance_km = road_dist if road_dist is not None else round(_haversine(payload.pickup_lat, payload.pickup_lng, payload.drop_lat, payload.drop_lng), 2)
     now = datetime.now(timezone.utc)
     doc = {
         "ride_id": ride_id,
@@ -618,8 +744,154 @@ async def update_driver_location(ride_id: str, payload: dict, request: Request, 
 app.include_router(api)
 
 
+# ---------- ADMIN PANEL ----------
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "DriveAll@AJK2026")
+
+
+async def _ensure_admin_seed():
+    """Idempotently seed/refresh the admin user with the configured password."""
+    pw_hash = bcrypt.hashpw(ADMIN_PASSWORD.encode(), bcrypt.gensalt()).decode()
+    await db.admins.update_one(
+        {"username": ADMIN_USERNAME},
+        {"$set": {"username": ADMIN_USERNAME, "password_hash": pw_hash, "updated_at": datetime.now(timezone.utc)},
+         "$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+
+
+async def _admin_from_token(token: Optional[str]) -> dict:
+    if not token:
+        raise HTTPException(status_code=401, detail="Admin auth required")
+    sess = await db.admin_sessions.find_one({"session_token": token}, {"_id": 0})
+    if not sess:
+        raise HTTPException(status_code=401, detail="Invalid admin session")
+    exp = sess.get("expires_at")
+    if isinstance(exp, str):
+        exp = datetime.fromisoformat(exp)
+    if exp and exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    if exp and exp < datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Admin session expired")
+    return sess
+
+
+def _bearer_token(authorization: Optional[str]) -> Optional[str]:
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization.split(" ", 1)[1].strip()
+    return None
+
+
+admin_api = APIRouter(prefix="/api/admin")
+
+
+@admin_api.post("/login")
+async def admin_login(payload: dict):
+    username = (payload.get("username") or "").strip()
+    password = payload.get("password") or ""
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="username & password required")
+    rec = await db.admins.find_one({"username": username}, {"_id": 0})
+    if not rec or not bcrypt.checkpw(password.encode(), rec["password_hash"].encode()):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = secrets.token_urlsafe(32)
+    await db.admin_sessions.insert_one({
+        "session_token": token,
+        "username": username,
+        "expires_at": datetime.now(timezone.utc) + timedelta(hours=12),
+        "created_at": datetime.now(timezone.utc),
+    })
+    return {"token": token, "username": username}
+
+
+@admin_api.get("/me")
+async def admin_me(authorization: Optional[str] = Header(default=None)):
+    sess = await _admin_from_token(_bearer_token(authorization))
+    return {"username": sess["username"]}
+
+
+@admin_api.post("/logout")
+async def admin_logout(authorization: Optional[str] = Header(default=None)):
+    tok = _bearer_token(authorization)
+    if tok:
+        await db.admin_sessions.delete_one({"session_token": tok})
+    return {"ok": True}
+
+
+@admin_api.get("/stats")
+async def admin_stats(authorization: Optional[str] = Header(default=None)):
+    await _admin_from_token(_bearer_token(authorization))
+    riders, drivers, total_rides, completed, sos = await asyncio.gather(
+        db.users.count_documents({"role": "rider"}),
+        db.users.count_documents({"role": "driver"}),
+        db.rides.count_documents({}),
+        db.rides.count_documents({"status": "completed"}),
+        db.sos_alerts.count_documents({}),
+    )
+    revenue_agg = await db.rides.aggregate([
+        {"$match": {"status": "completed"}},
+        {"$group": {"_id": None, "total": {"$sum": "$final_price"}}}
+    ]).to_list(1)
+    revenue = (revenue_agg[0]["total"] if revenue_agg else 0)
+    return {
+        "riders": riders, "drivers": drivers,
+        "total_rides": total_rides, "completed_rides": completed,
+        "sos_alerts": sos, "gross_fare": revenue,
+    }
+
+
+@admin_api.get("/users")
+async def admin_users(role: Optional[str] = None, authorization: Optional[str] = Header(default=None)):
+    await _admin_from_token(_bearer_token(authorization))
+    q = {}
+    if role in ("rider", "driver"):
+        q["role"] = role
+    docs = await db.users.find(q, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(500)
+    return docs
+
+
+@admin_api.post("/users/{user_id}/approve")
+async def admin_approve_driver(user_id: str, authorization: Optional[str] = Header(default=None)):
+    """Approve a driver (sets verified=True)."""
+    await _admin_from_token(_bearer_token(authorization))
+    res = await db.users.update_one({"user_id": user_id}, {"$set": {"verified": True, "verified_at": datetime.now(timezone.utc)}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"ok": True}
+
+
+@admin_api.post("/users/{user_id}/suspend")
+async def admin_suspend_user(user_id: str, payload: dict, authorization: Optional[str] = Header(default=None)):
+    await _admin_from_token(_bearer_token(authorization))
+    suspended = bool(payload.get("suspended", True))
+    await db.users.update_one({"user_id": user_id}, {"$set": {"suspended": suspended}})
+    return {"ok": True, "suspended": suspended}
+
+
+@admin_api.get("/rides")
+async def admin_rides(status: Optional[str] = None, authorization: Optional[str] = Header(default=None)):
+    await _admin_from_token(_bearer_token(authorization))
+    q = {}
+    if status:
+        q["status"] = status
+    docs = await db.rides.find(q, {"_id": 0}).sort("created_at", -1).to_list(300)
+    return docs
+
+
+@admin_api.get("/sos")
+async def admin_sos(authorization: Optional[str] = Header(default=None)):
+    await _admin_from_token(_bearer_token(authorization))
+    docs = await db.sos_alerts.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return docs
+
+
+app.include_router(admin_api)
+
+
 @app.on_event("startup")
 async def expire_offers_loop():
+    await _ensure_admin_seed()
+
     async def loop():
         while True:
             try:

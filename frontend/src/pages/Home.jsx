@@ -80,7 +80,12 @@ export default function Home() {
   // recompute fare estimate when distance/vehicle changes
   useEffect(() => {
     if (!pickup || !drop || !vehicleType) { setFareEst(null); return; }
-    api.post('/fare/estimate', { vehicle_type: vehicleType, distance_km }).then(({ data }) => {
+    api.post('/fare/estimate', {
+      vehicle_type: vehicleType,
+      distance_km,
+      pickup_lat: pickup.lat, pickup_lng: pickup.lng,
+      drop_lat: drop.lat, drop_lng: drop.lng,
+    }).then(({ data }) => {
       setFareEst(data);
       setOffer((cur) => (cur ? cur : String(data.suggested)));
     }).catch(() => {});

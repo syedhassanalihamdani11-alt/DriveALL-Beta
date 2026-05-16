@@ -9,6 +9,7 @@ import Rides from './pages/Rides';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import RideFlow from './pages/RideFlow';
+import Admin from './pages/Admin';
 import MobileFrame from './components/MobileFrame';
 import './App.css';
 
@@ -38,6 +39,7 @@ function Router() {
   return (
     <Routes>
       <Route path="/" element={<HomeRedirect />} />
+      <Route path="/admin" element={<Admin />} />
       <Route path="/onboarding" element={<ProtectedRoute requireRole={false}><MobileFrame><Onboarding /></MobileFrame></ProtectedRoute>} />
       <Route path="/home" element={<ProtectedRoute><MobileFrame><Home /></MobileFrame></ProtectedRoute>} />
       <Route path="/rides" element={<ProtectedRoute><MobileFrame><Rides /></MobileFrame></ProtectedRoute>} />

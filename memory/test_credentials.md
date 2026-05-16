@@ -1,10 +1,21 @@
 # DriveAll — Test Credentials
 
-Authentication is via **Emergent-managed Google OAuth** (no app-managed passwords).
+## 👑 ADMIN PANEL ACCESS
 
-## Test users seeded in MongoDB
+**URL**: https://271f4390-3ef9-4e57-a946-563d86d7ae83.preview.emergentagent.com/admin
 
-Use these to test backend / auth-gated flows. Pass as `Authorization: Bearer <session_token>`.
+- **Username**: `admin`
+- **Password**: `DriveAll@AJK2026`
+
+Capabilities: View riders/drivers, approve drivers, suspend users, monitor all rides, view SOS alerts, dashboard stats (riders, drivers, rides, completed, gross fare, SOS).
+
+To change the password, edit `/app/backend/.env` (`ADMIN_USERNAME` / `ADMIN_PASSWORD`) and restart backend — seed is idempotent and updates the hash on every startup.
+
+---
+
+## 🚖 RIDER / DRIVER TEST USERS (Google OAuth bypass)
+
+User-facing auth is via **Emergent-managed Google OAuth**. For automated testing or bypassing OAuth, use these seeded Bearer tokens via `Authorization: Bearer <token>` OR localStorage key `da_token`.
 
 ### Rider
 - **session_token**: `tok_rider_1778936464604`
@@ -12,13 +23,15 @@ Use these to test backend / auth-gated flows. Pass as `Authorization: Bearer <se
 - **email**: `rider_t@test.com`
 - **role**: rider
 
-### Driver (online)
+### Driver (online, vehicle: car)
 - **session_token**: `tok_driver_1778936465020`
 - **user_id**: `driver_t1778936465020`
 - **email**: `driver_t@test.com`
 - **role**: driver, is_online: true
 
-## Seed new users (helpful for testing)
+---
+
+## Seed fresh test users
 ```bash
 mongosh driveall_db --quiet --eval '
 var u="rider_"+Date.now();
@@ -29,23 +42,19 @@ print("RIDER: "+t);
 
 var u2="driver_"+Date.now();
 var t2="tok_driver_"+Date.now();
-db.users.insertOne({user_id:u2,email:"driver_"+Date.now()+"@test.com",name:"Test Driver",role:"driver",language:"en",theme:"light",rating:5,is_online:true,earnings:0,phone:"+923009876543",village:"Hattian",city:"Muzaffarabad",vehicle_model:"Suzuki Mehran",vehicle_plate:"AJK-1234",cnic:"12345-6789012-3",license_no:"DL-9876",current_lat:34.37,current_lng:73.47,created_at:new Date()});
+db.users.insertOne({user_id:u2,email:"driver_"+Date.now()+"@test.com",name:"Test Driver",role:"driver",language:"en",theme:"light",rating:5,is_online:true,earnings:0,phone:"+923009876543",village:"Hattian",city:"Muzaffarabad",vehicle_type:"rickshaw",vehicle_model:"Suzuki",vehicle_plate:"AJK-1234",current_lat:34.37,current_lng:73.47,created_at:new Date()});
 db.user_sessions.insertOne({user_id:u2,session_token:t2,expires_at:new Date(Date.now()+7*86400000),created_at:new Date()});
 print("DRIVER: "+t2);
 '
 ```
 
-## Browser cookie testing
+## Browser cookie/localStorage testing
 ```js
-await page.context.add_cookies([{
-  "name": "session_token",
-  "value": "tok_rider_1778936464604",
-  "domain": "271f4390-3ef9-4e57-a946-563d86d7ae83.preview.emergentagent.com",
-  "path": "/",
-  "httpOnly": True,
-  "secure": True,
-  "sameSite": "None"
-}]);
+// User-facing app uses Bearer token in localStorage:
+localStorage.setItem('da_token', 'tok_rider_1778936464604');
+
+// Admin panel uses Bearer token in localStorage:
+localStorage.setItem('da_admin_token', '<token from /api/admin/login>');
 ```
 
 ## Cleanup

@@ -123,8 +123,33 @@ export default function Settings() {
 
         {/* Profile */}
         <div className="rounded-2xl border border-ink-200 dark:border-ink-800 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="font-medium text-ink-900 dark:text-white">{t('profile')}</div>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="h-16 w-16 rounded-full overflow-hidden bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 font-bold text-xl">
+              {form.picture ? (
+                <img src={form.picture} alt="me" className="h-full w-full object-cover" />
+              ) : (
+                user?.name?.[0]?.toUpperCase() || 'U'
+              )}
+            </div>
+            <div className="flex-1">
+              <div className="font-medium text-ink-900 dark:text-white">{t('profile')}</div>
+              <label className="text-xs text-brand-600 font-medium cursor-pointer inline-flex items-center gap-1">
+                <input
+                  data-testid="profile-pic-upload"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    const r = new FileReader();
+                    r.onload = () => setForm((cur) => ({ ...cur, picture: String(r.result) }));
+                    r.readAsDataURL(f);
+                  }}
+                />
+                <Pencil size={12} /> Upload photo
+              </label>
+            </div>
             <button data-testid="profile-edit-toggle" onClick={() => setEditing((e) => !e)} className="text-sm text-brand-600 inline-flex items-center gap-1">
               <Pencil size={14} /> {editing ? t('cancel') : 'Edit'}
             </button>
