@@ -1,0 +1,142 @@
+{
+  "project_name": "DriveAll",
+  "domain": "Ride-Hailing / Transport",
+  "theme_archetype": {
+    "primary_theme": "light",
+    "supported_modes": ["light", "dark"],
+    "archetype": "Organic & Earthy / Clean & Trustworthy",
+    "description": "A map-first, highly accessible, trust-focused UI built for rural/mountain regions of Azad Kashmir. Minimal text, large touch targets, clear iconography, and high contrast."
+  },
+  "colors": {
+    "light": {
+      "background": "#F8FAFC",
+      "surface": "#FFFFFF",
+      "primary": "#16A34A",
+      "primary_foreground": "#FFFFFF",
+      "secondary": "#E2E8F0",
+      "secondary_foreground": "#0F172A",
+      "accent_alert": "#F97316",
+      "accent_info": "#3B82F6",
+      "accent_danger": "#EF4444",
+      "text_main": "#0F172A",
+      "text_muted": "#64748B",
+      "border": "#E2E8F0",
+      "map_overlay_bg": "rgba(255,255,255,0.9)",
+      "input_bg": "#F1F5F9"
+    },
+    "dark": {
+      "background": "#020617",
+      "surface": "#0F172A",
+      "primary": "#15803D",
+      "primary_foreground": "#FFFFFF",
+      "secondary": "#1E293B",
+      "secondary_foreground": "#F8FAFC",
+      "accent_alert": "#EA580C",
+      "accent_info": "#2563EB",
+      "accent_danger": "#DC2626",
+      "text_main": "#F8FAFC",
+      "text_muted": "#94A3B8",
+      "border": "#1E293B",
+      "map_overlay_bg": "rgba(15,23,42,0.85)",
+      "input_bg": "#1E293B"
+    }
+  },
+  "typography": {
+    "heading_font": "Poppins, sans-serif",
+    "body_font": "Inter, sans-serif",
+    "scale": {
+      "h1": "text-3xl sm:text-4xl font-semibold tracking-tight",
+      "h2": "text-2xl sm:text-3xl font-semibold tracking-tight",
+      "h3": "text-xl sm:text-2xl font-medium",
+      "body_large": "text-lg",
+      "body": "text-base",
+      "body_small": "text-sm",
+      "caption": "text-xs font-medium uppercase tracking-wider"
+    },
+    "rules": {
+      "roman_urdu": "Ensure line-height (leading-relaxed) is comfortable for Roman Urdu reading.",
+      "prices": "Prices must use font-semibold or font-bold and be visually distinct (e.g. text-2xl for main fare)."
+    }
+  },
+  "layout_and_spacing": {
+    "philosophy": "Mobile-first, bottom-heavy. Map is the canvas, UI is floating on top.",
+    "container": "w-full max-w-md mx-auto relative h-[100dvh] overflow-hidden",
+    "touch_targets": {
+      "minimum_height": "h-14",
+      "standard_padding": "px-6 py-4"
+    },
+    "radii": {
+      "button": "rounded-xl",
+      "card": "rounded-2xl",
+      "bottom_sheet": "rounded-t-3xl",
+      "input": "rounded-xl"
+    },
+    "shadows": {
+      "light": {
+        "floating": "shadow-[0_8px_30px_rgb(0,0,0,0.12)]",
+        "card": "shadow-sm"
+      },
+      "dark": {
+        "floating": "shadow-[0_8px_30px_rgb(0,0,0,0.5)]",
+        "card": "shadow-none"
+      }
+    }
+  },
+  "component_patterns": {
+    "map_container": {
+      "structure": "Absolute positioned, z-0, w-full h-full. Use Leaflet/React-Leaflet.",
+      "ui_overlay": "Absolute positioned above map, z-10 for floating buttons (SOS, location), z-40 for bottom navigation, z-50 for bottom sheets."
+    },
+    "bottom_sheet": {
+      "usage": "Fare negotiation, Ride booking, Driver details.",
+      "animation": "Framer Motion slide-up (initial y: '100%', animate y: 0, exit y: '100%').",
+      "design": "bg-surface rounded-t-3xl shadow-floating p-6 w-full max-w-md mx-auto absolute bottom-0",
+      "drag_handle": "w-12 h-1.5 bg-border rounded-full mx-auto mb-6"
+    },
+    "floating_action_button": {
+      "usage": "SOS button (Red), Recenter Map (White/Surface).",
+      "design": "h-12 w-12 rounded-full shadow-floating flex items-center justify-center"
+    },
+    "fare_negotiation_card": {
+      "structure": "Horizontal layout. Driver avatar left, details middle, price & time right.",
+      "timer": "Prominent countdown timer (90s) visually styled with accent_alert (Orange) if below 30s.",
+      "actions": "Grid layout for 'Counter Offer' (secondary) and 'Accept' (primary)."
+    },
+    "driver_card": {
+      "style": "inDrive style. Clean card, avatar, rating (star icon), car model, distance, offered fare.",
+      "border": "1px solid border-border in both modes for crisp separation."
+    },
+    "chat_bubble": {
+      "rider": "bg-primary text-primary_foreground rounded-2xl rounded-tr-sm px-4 py-2",
+      "driver": "bg-secondary text-secondary_foreground rounded-2xl rounded-tl-sm px-4 py-2"
+    },
+    "bottom_navigation": {
+      "design": "fixed bottom-0 w-full max-w-md bg-surface border-t border-border flex justify-around items-center h-16 pb-safe z-40",
+      "active_state": "text-primary font-medium",
+      "inactive_state": "text-text_muted"
+    }
+  },
+  "media": {
+    "logo_concept": {
+      "description": "Minimal flat design SVG. 'D' shaped road or path merging into an arrow pointing forward.",
+      "colors": "Primary Green (#16A34A). Needs a white variant for dark mode.",
+      "implementation": "Create as an inline React SVG component so colors can be controlled via currentColor or Tailwind text- classes."
+    },
+    "images": {
+      "driver_avatar_1": "https://images.unsplash.com/photo-1715255788414-58fb1ba21f03?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwyfHxwYWtpc3RhbiUyMGRyaXZlciUyMHBvcnRyYWl0fGVufDB8fHx8MTc3ODkzNTI4Nnww&ixlib=rb-4.1.0&q=85",
+      "driver_avatar_2": "https://images.unsplash.com/photo-1643621169707-69ca803c579e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwzfHxwYWtpc3RhbiUyMGRyaXZlciUyMHBvcnRyYWl0fGVufDB8fHx8MTc3ODkzNTI4Nnww&ixlib=rb-4.1.0&q=85",
+      "car_placeholder": "https://images.unsplash.com/photo-1746985082174-71e0acfe8aa4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w8NjA1Mjh8MHwxfHNlYXJjaHwyfHx3aGl0ZSUyMHNlZGFuJTIwY2FyJTIwc2lkZSUyMHZpZXd8ZW58MHx8fHwxNzc4OTM1Mjg2fDA&ixlib=rb-4.1.0&q=85"
+    }
+  },
+  "instructions_to_main_agent": [
+    "TECH STACK: React, Tailwind CSS, Framer Motion (for bottom sheets), React Leaflet (for mapping), Lucide React (for icons).",
+    "LAYOUT CONSTRAINT: The app must be wrapped in a mobile-first container (`w-full max-w-md mx-auto relative h-[100dvh] overflow-hidden bg-background`). Desktop views should center this container like a mobile frame.",
+    "MAP INTEGRATION: Ensure the Leaflet Map container has `z-index: 0`. All UI overlays (bottom sheets, floating buttons) must have higher z-indexes and absolute/fixed positioning.",
+    "THEME TOGGLE: Use Tailwind's 'dark' class strategy on the root element. Ensure text contrast meets accessibility standards.",
+    "TESTING: Every single interactive element (buttons, tabs, inputs, map pins, bottom sheet toggles) MUST have a `data-testid` attribute. Use kebab-case (e.g., `data-testid=\"sos-button\"`, `data-testid=\"accept-fare-button\"`).",
+    "TYPOGRAPHY: Import Poppins and Inter from Google Fonts. Use Poppins for H1/H2/H3 and Inter for body text.",
+    "COMPONENT STRUCTURE: Do not use complex Shadcn cards for the Bottom Sheets. Build custom `motion.div` bottom sheets for the negotiation UI to ensure fluid gestures and correct rural-friendly spacing.",
+    "LANGUAGE TOGGLE: Build a simple state context for Language (English / Roman Urdu) and wrap visible text strings in a translation helper. Roman Urdu text should read naturally.",
+    "No placeholder URLs: Use the provided Unsplash URLs in the media section for driver avatars and car visuals."
+  ]
+}
